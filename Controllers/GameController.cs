@@ -23,6 +23,22 @@ namespace GuessingGame.API.Controllers
                 : BadRequest(result);
         }
 
+        [HttpPost("{gameId:int}/players")]
+        public async Task<IActionResult> JoinGame(int gameId, [FromBody] JoinGameRequest request)
+        {
+            ApiResponse<GameStateResponse> result = await _games.JoinGameAsync(gameId, request);
+
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPost("{gameId:int}/start")]
+        public async Task<IActionResult> StartGame(int gameId)
+        {
+            ApiResponse<GameStateResponse> result = await _games.StartGameAsync(gameId);
+
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
         [HttpGet("{gameId:int}")]
         public async Task<IActionResult> GetGame(int gameId)
         {
@@ -43,14 +59,6 @@ namespace GuessingGame.API.Controllers
                 return BadRequest(new ApiResponse { Success = false, Message = "Game is not completed yet" });
 
             return Ok(result);
-        }
-
-        [HttpPost("{gameId:int}/start")]
-        public async Task<IActionResult> StartGame(int gameId)
-        {
-            ApiResponse<GameStateResponse> result = await _games.StartGameAsync(gameId);
-
-            return result.Success ? Ok(result) : BadRequest(result);
         }
 
         [HttpPost("{gameId:int}/cancel")]

@@ -4,8 +4,6 @@ using GuessingGame.API.Models;
 using GuessingGame.API.Models.Enums;
 using GuessingGame.API.Repositories.Interfaces;
 using GuessingGame.API.Services.Interfaces;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 
 namespace GuessingGame.API.Services
 {
@@ -25,43 +23,33 @@ namespace GuessingGame.API.Services
             if (!Enum.IsDefined(request.GameType))
                 return Fail<CreateGameResponse>("Use 1 for Easy, 2 for Medium, or 3 for Hard and 99 for Random.");
 
+            if (string.IsNullOrWhiteSpace(request.PlayerName))
+                return Fail<CreateGameResponse>("Player name is required");
+
+            if (request.stake <= 0)
+                return Fail<CreateGameResponse>("Stake must be greater than zero");
+
             GameType selectedGame = request.GameType == GameType.Random ? (GameType)Random.Shared.Next(1, 4) : request.GameType;
             GameConfig config = GameSettings.GetConfig(selectedGame);
 
-            if (request.Players.Count < config.MinPlayers || request.Players.Count > config.MaxPlayers)
-                return Fail<CreateGameResponse>($"Players must be between {config.MinPlayers} and {config.MaxPlayers} for {request.GameType} game mode");
+            string name = request.PlayerName.Trim();
 
-            if (request.Players.Any(x => string.IsNullOrWhiteSpace(x.PlayerName) || x.stake <= 0))
-                return Fail<CreateGameResponse>("Players must have a name and a stake greater than zero");
+            Player? player = await _players.GetByNameAsync(name);
 
-            bool duplicateNames = request.Players.GroupBy(x => x.PlayerName.Trim(), StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1);
-
-            if (duplicateNames)
-                return Fail<CreateGameResponse>("A player can not be entered twice");
-
-            var confirmedPlayers = new List<(Player player, decimal stake)>();
-
-            foreach (var input in request.Players)
+            if (player is null)
             {
-                string name = input.PlayerName.Trim();
-                Player player = await _players.GetByNameAsync(name);
-
-                if (player is null)
-                {
-                    player = new Player { Name = char.ToUpper(name[0]) + name[1..].ToLower() };
-                    await _players.AddAsync(player);
-                    await _players.SaveChangesAsync();
-                }
-
-                if (player.Balance < input.stake)
-                    return Fail<CreateGameResponse>($"{player.Name} has insufficient balance");
-
-                confirmedPlayers.Add((player, input.stake));
+                player = new Player { Name = char.ToUpper(name[0]) + name[1..].ToLower() };
+                await _players.AddAsync(player);
+                await _players.SaveChangesAsync();
             }
+
+            if (player.Balance < request.stake)
+                return Fail<CreateGameResponse>($"{player.Name} has insufficient balance.");
 
             var game = new GameSession
             {
                 GameType = selectedGame,
+                Status = GameStatus.WaitingForPlayers,
                 CurrentRound = 0,
                 Attempts = config.Attempts,
                 GuessLength = config.GuessLength,
@@ -71,28 +59,26 @@ namespace GuessingGame.API.Services
                 AllowRollup = config.AllowRollup,
                 AllowAlphanumeric = config.AllowAlphanumeric,
                 AllowDuplicates = config.AllowDuplicates,
-                WinningNumbers = string.Join(", ", RandomGenerator.Generate(config))
+                WinningNumbers = string.Join(", ", RandomGenerator.Generate(config)),
+                CreatedAt = DateTime.UtcNow
             };
 
             await _games.AddAsync(game);
             await _games.SaveChangesAsync();
 
-            foreach ((Player player, decimal stake) in confirmedPlayers)
-            {
-                _games.AddGamePlayer(new GamePlayer
-                {
-                    GameSessionId = game.Id,
-                    PlayerId = player.Id,
-                    Stake = stake,
-                    Status = PlayerStatus.Active
-                });
-            }
 
+            _games.AddGamePlayer(new GamePlayer
+            {
+                GameSessionId = game.Id,
+                PlayerId = player.Id,
+                Stake = request.stake,
+                Status = PlayerStatus.Active
+            });
 
             await _games.SaveChangesAsync();
 
             GameSession created = (await _games.GetByIdAsync(game.Id));
-            return Ok("Game created Successfully.", MapCreatedGame(created));
+            return Ok("Game created. Waiting for other players to join.", MapCreatedGame(created));
         }
 
         public async Task<ApiResponse<GameStateResponse>> GetGameAsync(int gameId)
@@ -105,6 +91,80 @@ namespace GuessingGame.API.Services
             return Ok("Game retrieved successfully.", MapState(game));
         }
 
+        public async Task<ApiResponse<GameStateResponse>> JoinGameAsync(int gameId, JoinGameRequest request)
+        {
+            GameSession? game =  await _games.GetByIdAsync(gameId);
+
+            if (game is null)
+            {
+                return Fail<GameStateResponse>("Game not found.");
+            }
+
+            if (game.Status != GameStatus.WaitingForPlayers)
+            {
+                return Fail<GameStateResponse>("Players cannot join after the game has started.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.PlayerName))
+            {
+                return Fail<GameStateResponse>("Player name is required.");
+            }
+
+            if (request.Stake <= 0)
+            {
+                return Fail<GameStateResponse>("Stake must be greater than zero.");
+            }
+
+            GameConfig config = GameSettings.GetConfig(game.GameType);
+
+            if (game.Players.Count >= config.MaxPlayers)
+            {
+                return Fail<GameStateResponse>($"The game already has the maximum of " + $"{config.MaxPlayers} players.");
+            }
+
+            string name = request.PlayerName.Trim();
+
+            Player? player = await _players.GetByNameAsync(name);
+
+            if (player is null)
+            {
+                player = new Player
+                {
+                    Name = char.ToUpper(name[0]) + name[1..].ToLower()
+                };
+
+                await _players.AddAsync(player);
+                await _players.SaveChangesAsync();
+            }
+
+            bool alreadyJoined = game.Players.Any(gamePlayer => gamePlayer.PlayerId == player.Id);
+
+            if (alreadyJoined)
+            {
+                return Fail<GameStateResponse>($"{player.Name} has already joined this game.");
+            }
+
+            if (player.Balance < request.Stake)
+            {
+                return Fail<GameStateResponse>($"{player.Name} has insufficient balance.");
+            }
+
+            var gamePlayer = new GamePlayer
+            {
+                GameSessionId = game.Id,
+                PlayerId = player.Id,
+                Stake = request.Stake,
+                Status = PlayerStatus.Active
+            };
+
+            _games.AddGamePlayer(gamePlayer);
+            await _games.SaveChangesAsync();
+
+            GameSession updatedGame = (await _games.GetByIdAsync(gameId))!;
+
+            return Ok($"{player.Name} joined the game successfully.", MapState(updatedGame));
+        }
+
         public async Task<ApiResponse<GameStateResponse>> StartGameAsync(int gameId)
         {
             GameSession game = await _games.GetByIdAsync(gameId);
@@ -112,8 +172,20 @@ namespace GuessingGame.API.Services
             if (game is null)
                 return Fail<GameStateResponse>("Game not found.");
 
-            if (game.Status != GameStatus.WaitingForGuesses)
+            if (game.Status != GameStatus.WaitingForPlayers)
                 return Fail<GameStateResponse>($"Game cannot be started with status: {game.Status}");
+
+            GameConfig config = GameSettings.GetConfig(game.GameType);
+
+            if (game.Players.Count < config.MinPlayers)
+            {
+                return Fail<GameStateResponse>($"Game cannot be started with less than {config.MinPlayers} players.");
+            }
+
+            if (game.Players.Count > config.MaxPlayers)
+            {
+                return Fail<GameStateResponse>($"Game cannot be started with more than {config.MaxPlayers} players.");
+            }
 
             if (game.Players.Any(x => x.Player.Balance < x.Stake))
                 return Fail<GameStateResponse>("One or more players have insufficient balance to start the game.");
@@ -125,7 +197,9 @@ namespace GuessingGame.API.Services
             }
 
             game.CurrentRound = 1;
+            game.Status = GameStatus.WaitingForGuesses;
             game.StartedAt = DateTime.UtcNow;
+
             await _games.SaveChangesAsync();
 
             return Ok("Game started successfully. Round 1 is active.", MapState(game));

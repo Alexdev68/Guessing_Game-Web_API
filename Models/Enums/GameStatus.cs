@@ -2,9 +2,10 @@
 {
     public enum GameStatus
     {
-        WaitingForGuesses = 1,
-        WaitingForRollupGuesses = 2,
-        Completed = 3,
-        Cancelled = 4
+        WaitingForPlayers = 1,
+        WaitingForGuesses = 2,
+        WaitingForRollupGuesses = 3,
+        Completed = 4,
+        Cancelled = 5
     }
 }
