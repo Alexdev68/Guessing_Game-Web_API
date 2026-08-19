@@ -1,4 +1,6 @@
-﻿using GuessingGame.API.Models;
+﻿using GuessingGame.API.DTOs.Request;
+using GuessingGame.API.Models;
+using GuessingGame.API.Models.Enums;
 
 namespace GuessingGame.API.Repositories.Interfaces
 {
@@ -9,6 +11,8 @@ namespace GuessingGame.API.Repositories.Interfaces
         void AddGamePlayer(GamePlayer gamePlayer);
         void AddGuess(PlayerGuess guess);
         Task<bool> GuessExistsAsync(int gamePlayerId, int roundNumber, bool isRollupGuess);
+
+        Task<GameSession> SaveGame(CreateGameRequest request, GameConfig config, Player player, GameType selectedGame);
         Task SaveChangesAsync();
     }
 }

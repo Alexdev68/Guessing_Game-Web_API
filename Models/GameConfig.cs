@@ -2,7 +2,7 @@
 
 namespace GuessingGame.API.Models
 {
-    internal class GameConfig
+    public class GameConfig
     {
         public GameType Type { get; set; }
 

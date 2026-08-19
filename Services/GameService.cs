@@ -46,38 +46,8 @@ namespace GuessingGame.API.Services
             if (player.Balance < request.stake)
                 return Fail<CreateGameResponse>($"{player.Name} has insufficient balance.");
 
-            var game = new GameSession
-            {
-                GameType = selectedGame,
-                Status = GameStatus.WaitingForPlayers,
-                CurrentRound = 0,
-                Attempts = config.Attempts,
-                GuessLength = config.GuessLength,
-                MinValue = config.MinValue,
-                MaxValue = config.MaxValue,
-                Multiplier = config.Multiplier,
-                AllowRollup = config.AllowRollup,
-                AllowAlphanumeric = config.AllowAlphanumeric,
-                AllowDuplicates = config.AllowDuplicates,
-                WinningNumbers = string.Join(", ", RandomGenerator.Generate(config)),
-                CreatedAt = DateTime.UtcNow
-            };
 
-            await _games.AddAsync(game);
-            await _games.SaveChangesAsync();
-
-
-            _games.AddGamePlayer(new GamePlayer
-            {
-                GameSessionId = game.Id,
-                PlayerId = player.Id,
-                Stake = request.stake,
-                Status = PlayerStatus.Active
-            });
-
-            await _games.SaveChangesAsync();
-
-            GameSession created = (await _games.GetByIdAsync(game.Id));
+            GameSession created = await _games.SaveGame(request, config, player, selectedGame);
             return Ok("Game created. Waiting for other players to join.", MapCreatedGame(created));
         }
 

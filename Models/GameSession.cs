@@ -22,6 +22,6 @@ namespace GuessingGame.API.Models
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public int? FinalWinnerPlayerId { get; set; }
-        public ICollection<GamePlayer> Players { get; set; } = new List<GamePlayer>();
+        public virtual ICollection<GamePlayer> Players { get; set; } = new List<GamePlayer>();
     }
 }

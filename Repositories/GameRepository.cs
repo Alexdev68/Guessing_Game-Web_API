@@ -1,7 +1,11 @@
 ﻿using GuessingGame.API.Data;
+using GuessingGame.API.DTOs.Request;
 using GuessingGame.API.Models;
+using GuessingGame.API.Models.Enums;
 using GuessingGame.API.Repositories.Interfaces;
+using GuessingGame.API.Services;
 using Microsoft.EntityFrameworkCore;
+using static Azure.Core.HttpHeader;
 
 namespace GuessingGame.API.Repositories
 {
@@ -31,5 +35,39 @@ namespace GuessingGame.API.Repositories
                 x.IsRollupGuess == isRollupGuess);
 
         public Task SaveChangesAsync() => _context.SaveChangesAsync();
+
+        public async Task<GameSession> SaveGame(CreateGameRequest request, GameConfig config, Player player, GameType selectedGame)
+        {
+            var game = new GameSession
+            {
+                GameType = selectedGame,
+                Status = GameStatus.WaitingForPlayers,
+                CurrentRound = 0,
+                Attempts = config.Attempts,
+                GuessLength = config.GuessLength,
+                MinValue = config.MinValue,
+                MaxValue = config.MaxValue,
+                Multiplier = config.Multiplier,
+                AllowRollup = config.AllowRollup,
+                AllowAlphanumeric = config.AllowAlphanumeric,
+                AllowDuplicates = config.AllowDuplicates,
+                WinningNumbers = string.Join(", ", RandomGenerator.Generate(config)),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            game.Players.Add(new GamePlayer
+            {
+                PlayerId = player.Id,
+                Stake = request.stake,
+                Status = PlayerStatus.Active
+            });
+
+            await _context.GameSessions.AddAsync(game);
+
+            await _context.SaveChangesAsync();
+
+            return game;
+        }
+
     }
 }

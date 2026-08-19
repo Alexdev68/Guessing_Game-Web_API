@@ -14,7 +14,7 @@ namespace GuessingGame.API.Controllers
         public GameController(IGameService games) => _games = games;
 
         [HttpPost("create")]
-        public async Task<IActionResult> CreateGame([FromBody] CreateGameRequest request)
+        public async Task<IActionResult> CreateGame(CreateGameRequest request)
         {
             ApiResponse<CreateGameResponse> result = await _games.CreateGameAsync(request);
 
@@ -24,7 +24,7 @@ namespace GuessingGame.API.Controllers
         }
 
         [HttpPost("{gameId:int}/players")]
-        public async Task<IActionResult> JoinGame(int gameId, [FromBody] JoinGameRequest request)
+        public async Task<IActionResult> JoinGame([FromRoute] int gameId, [FromBody] JoinGameRequest request)
         {
             ApiResponse<GameStateResponse> result = await _games.JoinGameAsync(gameId, request);
 
@@ -32,7 +32,7 @@ namespace GuessingGame.API.Controllers
         }
 
         [HttpPost("{gameId:int}/start")]
-        public async Task<IActionResult> StartGame(int gameId)
+        public async Task<IActionResult> StartGame([FromRoute] int gameId)
         {
             ApiResponse<GameStateResponse> result = await _games.StartGameAsync(gameId);
 
@@ -40,7 +40,7 @@ namespace GuessingGame.API.Controllers
         }
 
         [HttpGet("{gameId:int}")]
-        public async Task<IActionResult> GetGame(int gameId)
+        public async Task<IActionResult> GetGame([FromRoute] int gameId)
         {
             ApiResponse<GameStateResponse> result = await _games.GetGameAsync(gameId);
 
@@ -48,7 +48,7 @@ namespace GuessingGame.API.Controllers
         }
 
         [HttpGet("{gameId:int}/results")]
-        public async Task<IActionResult> GetResult(int gameId)
+        public async Task<IActionResult> GetResult([FromRoute] int gameId)
         {
             ApiResponse<GameStateResponse> result = await _games.GetGameAsync(gameId);
 
@@ -62,7 +62,7 @@ namespace GuessingGame.API.Controllers
         }
 
         [HttpPost("{gameId:int}/cancel")]
-        public async Task<IActionResult> CancelGame(int gameId)
+        public async Task<IActionResult> CancelGame([FromRoute] int gameId)
         {
             ApiResponse result = await _games.CancelGameAsync(gameId);
 
