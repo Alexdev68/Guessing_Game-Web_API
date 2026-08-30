@@ -13,6 +13,11 @@ namespace GuessingGame.API.Controllers
         private readonly IGameService _games;
         public GameController(IGameService games) => _games = games;
 
+        /// <summary>
+        /// A single player can create a new game session and become the host of the game.
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost("create")]
         public async Task<IActionResult> CreateGame(CreateGameRequest request)
         {
@@ -23,7 +28,13 @@ namespace GuessingGame.API.Controllers
                 : BadRequest(result);
         }
 
-        [HttpPost("{gameId:int}/players")]
+        /// <summary>
+        /// A player can join an existing game session by providing the game ID and their player information.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [HttpPost("{gameId:int}/join-game")]
         public async Task<IActionResult> JoinGame([FromRoute] int gameId, [FromBody] JoinGameRequest request)
         {
             ApiResponse<GameStateResponse> result = await _games.JoinGameAsync(gameId, request);
@@ -31,6 +42,11 @@ namespace GuessingGame.API.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary>
+        /// The host of the game can start the game session once all players have joined.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <returns></returns>
         [HttpPost("{gameId:int}/start")]
         public async Task<IActionResult> StartGame([FromRoute] int gameId)
         {
@@ -39,6 +55,37 @@ namespace GuessingGame.API.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+
+        /// <summary>
+        /// A player can retrieve all games that are available to join
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet("available-games")]
+        public async Task<IActionResult> GetAvailableGames()
+        {
+            ApiResponse<List<GameStateResponse>> result = await _games.GetAvailableGamesAsync();
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// A player can retrieve all games they are a part of, including games that are not started yet or active in or completed.
+        /// </summary>
+        /// <param name="playerId"></param>
+        /// <param name="filter"></param>
+        /// <returns></returns>
+        [HttpGet("{playerId:int}/games")]
+        public async Task<IActionResult> GetPlayerGames(int playerId, [FromQuery] PlayerGamesFilter filter = PlayerGamesFilter.All)
+        {
+            ApiResponse<List<GameStateResponse>> result = await _games.GetPlayerGamesAsync(playerId, filter);
+
+            return result.Success ? Ok(result) : NotFound(result);
+        }
+
+        /// <summary>
+        /// A player can retrieve the current state of a specific game session by providing the game ID.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <returns></returns>
         [HttpGet("{gameId:int}")]
         public async Task<IActionResult> GetGame([FromRoute] int gameId)
         {
@@ -47,6 +94,11 @@ namespace GuessingGame.API.Controllers
             return result.Success ? Ok(result) : NotFound(result);
         }
 
+        /// <summary>
+        /// This endpoint retrieves a game that has been completed by providing the game ID.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <returns></returns>
         [HttpGet("{gameId:int}/results")]
         public async Task<IActionResult> GetResult([FromRoute] int gameId)
         {
@@ -61,6 +113,12 @@ namespace GuessingGame.API.Controllers
             return Ok(result);
         }
 
+
+        /// <summary>
+        /// This endpoint cancels a game that has been created.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <returns></returns>
         [HttpPost("{gameId:int}/cancel")]
         public async Task<IActionResult> CancelGame([FromRoute] int gameId)
         {

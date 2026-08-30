@@ -89,7 +89,7 @@ namespace GuessingGame.API.Services
 
             if (game.Players.Count >= config.MaxPlayers)
             {
-                return Fail<GameStateResponse>($"The game already has the maximum of " + $"{config.MaxPlayers} players.");
+                return Fail<GameStateResponse>($"The game is full, maximum of " + $"{config.MaxPlayers} players.");
             }
 
             string name = request.PlayerName.Trim();
@@ -173,6 +173,38 @@ namespace GuessingGame.API.Services
             await _games.SaveChangesAsync();
 
             return Ok("Game started successfully. Round 1 is active.", MapState(game));
+        }
+
+        public async Task<ApiResponse<List<GameStateResponse>>> GetAvailableGamesAsync()
+        {
+            List<GameSession> waitingGames = await _games.GetWaitingGamesAsync();
+
+            List<GameStateResponse> availableGames = waitingGames
+                .Where(game =>
+                {
+                    GameConfig config = GameSettings.GetConfig(game.GameType);
+                    return game.Players.Count < config.MaxPlayers;
+                })
+                .Select(game => MapState(game))
+                .ToList();
+
+            return Ok($"{availableGames.Count} available games retrieved successfully.", availableGames);   
+        }
+
+        public async Task<ApiResponse<List<GameStateResponse>>> GetPlayerGamesAsync(int playerId, PlayerGamesFilter filter)
+        {
+            Player? player = await _players.GetByIdAsync(playerId);
+
+            if (player is null)
+            {
+                return Fail<List<GameStateResponse>>("Player not found.");
+            }
+
+            List<GameSession> games = await _games.GetGamesByPlayerIdAsync(playerId, filter);
+
+            List<GameStateResponse> response = games .Select(game => MapState(game)).ToList();
+
+            return Ok( $"{response.Count} {filter} game(s) found for {player.Name}.", response);
         }
 
         public async Task<ApiResponse> CancelGameAsync(int gameId)

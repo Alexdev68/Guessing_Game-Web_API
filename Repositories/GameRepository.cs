@@ -69,5 +69,46 @@ namespace GuessingGame.API.Repositories
             return game;
         }
 
+        public Task<List<GameSession>> GetWaitingGamesAsync()
+        {
+            return _context.GameSessions
+                .AsNoTracking()
+                .Include(game => game.Players)
+                .ThenInclude(gamePlayer => gamePlayer.Player)
+                .Where(game => game.Status == GameStatus.WaitingForPlayers)
+                .ToListAsync();
+        }
+
+        public Task<List<GameSession>> GetGamesByPlayerIdAsync(int playerId, PlayerGamesFilter filter)
+        {
+            IQueryable<GameSession> query = _context.GameSessions
+                .AsNoTracking()
+                .Include(game => game.Players)
+                    .ThenInclude(gamePlayer => gamePlayer.Player)
+                .Where(game => game.Players.Any(
+                    gamePlayer => gamePlayer.PlayerId == playerId));
+
+            query = filter switch
+            {
+                PlayerGamesFilter.Active =>
+                    query.Where(game =>
+                        game.Status == GameStatus.WaitingForGuesses ||
+                        game.Status == GameStatus.WaitingForRollupGuesses),
+
+                PlayerGamesFilter.NotStarted =>
+                    query.Where(game =>
+                        game.Status == GameStatus.WaitingForPlayers),
+
+                PlayerGamesFilter.Completed =>
+                    query.Where(game =>
+                        game.Status == GameStatus.Completed),
+
+                _ => query
+            };
+
+                return query
+                    .OrderByDescending(game => game.CreatedAt)
+                    .ToListAsync();
+        }
     }
 }
