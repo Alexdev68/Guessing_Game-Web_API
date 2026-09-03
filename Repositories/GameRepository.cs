@@ -5,7 +5,6 @@ using GuessingGame.API.Models.Enums;
 using GuessingGame.API.Repositories.Interfaces;
 using GuessingGame.API.Services;
 using Microsoft.EntityFrameworkCore;
-using static Azure.Core.HttpHeader;
 
 namespace GuessingGame.API.Repositories
 {

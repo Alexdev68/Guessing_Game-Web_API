@@ -12,6 +12,12 @@ namespace GuessingGame.API.Controllers
         private readonly IRoundService _rounds;
         public RoundsController(IRoundService rounds) => _rounds = rounds;
 
+        /// <summary>
+        /// This endpoint collects guesses for normal rounds.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost("guesses")]
         public async Task<IActionResult> SubmitGuess(
             int gameId, [FromBody] SubmitGuessRequest request)
@@ -21,6 +27,12 @@ namespace GuessingGame.API.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        /// <summary>
+        /// This endpoint collects guesses for rollup rounds.
+        /// </summary>
+        /// <param name="gameId"></param>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost("rollup/guesses")]
         public async Task<IActionResult> SubmitRollupGuess(
             int gameId, [FromBody] SubmitGuessRequest request)

@@ -43,7 +43,7 @@ namespace GuessingGame.API.Controllers
         }
 
         /// <summary>
-        /// The host of the game can start the game session once all players have joined.
+        /// A player of the game can start the game session once all players have joined.
         /// </summary>
         /// <param name="gameId"></param>
         /// <returns></returns>
@@ -57,7 +57,7 @@ namespace GuessingGame.API.Controllers
 
 
         /// <summary>
-        /// A player can retrieve all games that are available to join
+        /// A player can retrieve all games that are available to join.
         /// </summary>
         /// <returns></returns>
         [HttpGet("available-games")]
@@ -115,7 +115,7 @@ namespace GuessingGame.API.Controllers
 
 
         /// <summary>
-        /// This endpoint cancels a game that has been created.
+        /// This endpoint cancels a game that has not been completed or cancelled.
         /// </summary>
         /// <param name="gameId"></param>
         /// <returns></returns>
