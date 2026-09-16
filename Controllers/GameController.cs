@@ -1,11 +1,14 @@
 ﻿using GuessingGame.API.DTOs.Request;
 using GuessingGame.API.DTOs.Response;
 using GuessingGame.API.Models.Enums;
+using GuessingGame.API.Services;
 using GuessingGame.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GuessingGame.API.Controllers
 {
+    [Authorize]
     [Route("api/games")]
     [ApiController]
     public class GameController : ControllerBase
@@ -19,9 +22,10 @@ namespace GuessingGame.API.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost("create")]
-        public async Task<IActionResult> CreateGame(CreateGameRequest request)
+        public async Task<IActionResult> CreateGame([FromBody] CreateGameRequest request)
         {
-            ApiResponse<CreateGameResponse> result = await _games.CreateGameAsync(request);
+            int playerId = CurrentUserService.GetPlayerId(User);
+            ApiResponse<CreateGameResponse> result = await _games.CreateGameAsync(playerId, request);
 
             return result.Success
                 ? CreatedAtAction(nameof(GetGame), new { gameId = result.Data!.GameId }, result)
@@ -37,7 +41,8 @@ namespace GuessingGame.API.Controllers
         [HttpPost("{gameId:int}/join-game")]
         public async Task<IActionResult> JoinGame([FromRoute] int gameId, [FromBody] JoinGameRequest request)
         {
-            ApiResponse<GameStateResponse> result = await _games.JoinGameAsync(gameId, request);
+            int playerId = CurrentUserService.GetPlayerId(User);
+            ApiResponse<GameStateResponse> result = await _games.JoinGameAsync(gameId, playerId, request);
 
             return result.Success ? Ok(result) : BadRequest(result);
         }

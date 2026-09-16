@@ -12,17 +12,17 @@ namespace GuessingGame.API.Services
         private readonly IGameRepository _games;
         public RoundService(IGameRepository games) => _games = games;
 
-        public Task<ApiResponse<SubmitGuessResponse>> SubmitGuessAsync(int gameId, SubmitGuessRequest request)
+        public Task<ApiResponse<SubmitGuessResponse>> SubmitGuessAsync(int gameId, int playerId, SubmitGuessRequest request)
         {
-            return SaveAndEvaluateAsync(gameId, request, false);
+            return SaveAndEvaluateAsync(gameId, request, playerId, false);
         }
 
-        public Task<ApiResponse<SubmitGuessResponse>> SubmitRollupGuessAsync(int gameId, SubmitGuessRequest request)
+        public Task<ApiResponse<SubmitGuessResponse>> SubmitRollupGuessAsync(int gameId, int playerId, SubmitGuessRequest request)
         {
-            return SaveAndEvaluateAsync(gameId, request, true);
+            return SaveAndEvaluateAsync(gameId, request, playerId, true);
         }
 
-        private async Task<ApiResponse<SubmitGuessResponse>> SaveAndEvaluateAsync(int gameId, SubmitGuessRequest request, bool isRollup)
+        private async Task<ApiResponse<SubmitGuessResponse>> SaveAndEvaluateAsync(int gameId, SubmitGuessRequest request, int playerId, bool isRollup)
         {
             GameSession? game = await _games.GetByIdAsync(gameId);
             if (game is null) return Fail("Game not found.");
@@ -34,7 +34,7 @@ namespace GuessingGame.API.Services
             if (game.Status != required)
                 return Fail($"Guesses cannot be submitted while status is {game.Status}.");
 
-            GamePlayer? entry = game.Players.FirstOrDefault(x => x.PlayerId == request.PlayerId);
+            GamePlayer? entry = game.Players.FirstOrDefault(x => x.PlayerId == playerId);
             if (entry is null) return Fail("This player is not part of the game.");
 
             if ((!isRollup && entry.Status != PlayerStatus.Active) || (isRollup && entry.Status != PlayerStatus.InRollup))
@@ -78,7 +78,7 @@ namespace GuessingGame.API.Services
                 {
                     GuessId = guess.Id,
                     GameId = gameId,
-                    PlayerId = request.PlayerId,
+                    PlayerId = playerId,
                     SubmittedRound = round,
                     IsRollupGuess = isRollup,
                     RoundEvaluated = false,
@@ -97,7 +97,7 @@ namespace GuessingGame.API.Services
             {
                 GuessId = guess.Id,
                 GameId = gameId,
-                PlayerId = request.PlayerId,
+                PlayerId = playerId,
                 SubmittedRound = round,
                 IsRollupGuess = isRollup,
                 RoundEvaluated = true,

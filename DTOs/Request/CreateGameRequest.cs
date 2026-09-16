@@ -8,10 +8,7 @@ namespace GuessingGame.API.DTOs.Request
         [Required]
         public GameType GameType { get; set; }
 
-        [Required, MinLength(2)]
-        public string PlayerName { get; set; } = string.Empty;
-
         [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
-        public decimal stake { get; set; }
+        public decimal Stake { get; set; }
     }
 }

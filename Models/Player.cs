@@ -24,5 +24,6 @@ namespace GuessingGame.API.Models
         public DateTime LastSeen { get; set; } = DateTime.UtcNow;
 
         public ICollection<GamePlayer> GameEntries { get; set; } = new List<GamePlayer>();
+        public User? User { get; set; }
     }
 }

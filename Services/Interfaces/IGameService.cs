@@ -6,8 +6,8 @@ namespace GuessingGame.API.Services.Interfaces
 {
     public interface IGameService
     {
-        public Task<ApiResponse<CreateGameResponse>> CreateGameAsync(CreateGameRequest request);
-        Task<ApiResponse<GameStateResponse>> JoinGameAsync(int gameId, JoinGameRequest request);
+        public Task<ApiResponse<CreateGameResponse>> CreateGameAsync(int authenticatedPlayerId, CreateGameRequest request);
+        Task<ApiResponse<GameStateResponse>> JoinGameAsync(int gameId, int authenticatedPlayerId, JoinGameRequest request);
         public Task<ApiResponse<GameStateResponse>> StartGameAsync(int gameId);
         public Task<ApiResponse<GameStateResponse>> GetGameAsync(int gameId);
         public Task<ApiResponse<List<GameStateResponse>>> GetAvailableGamesAsync();

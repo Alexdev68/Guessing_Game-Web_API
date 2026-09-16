@@ -11,6 +11,7 @@ namespace GuessingGame.API.Data
         public DbSet<GameSession> GameSessions => Set<GameSession>();
         public DbSet<GamePlayer> GamePlayers => Set<GamePlayer>();
         public DbSet<PlayerGuess> PlayerGuesses => Set<PlayerGuess>();
+        public DbSet<User> Users => Set<User>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -47,6 +48,20 @@ namespace GuessingGame.API.Data
             modelBuilder.Entity<PlayerGuess>()
                 .HasIndex(x => new { x.GamePlayerId, x.RoundNumber, x.IsRollupGuess })
                 .IsUnique();
+
+            modelBuilder.Entity<User>()
+                .HasIndex(user => user.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<User>()
+                .HasIndex(user => user.PlayerId)
+                .IsUnique();
+
+            modelBuilder.Entity<User>()
+                .HasOne(user => user.Player)
+                .WithOne(player => player.User)
+                .HasForeignKey<User>(user => user.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

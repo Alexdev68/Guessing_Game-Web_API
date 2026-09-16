@@ -18,32 +18,25 @@ namespace GuessingGame.API.Services
             _players = players;
         }
 
-        public async Task<ApiResponse<CreateGameResponse>> CreateGameAsync(CreateGameRequest request)
+        public async Task<ApiResponse<CreateGameResponse>> CreateGameAsync(int authenticatedPlayerId, CreateGameRequest request)
         {
             if (!Enum.IsDefined(request.GameType))
                 return Fail<CreateGameResponse>("Use 1 for Easy, 2 for Medium, or 3 for Hard and 99 for Random.");
 
-            if (string.IsNullOrWhiteSpace(request.PlayerName))
-                return Fail<CreateGameResponse>("Player name is required");
-
-            if (request.stake <= 0)
+            if (request.Stake <= 0)
                 return Fail<CreateGameResponse>("Stake must be greater than zero");
 
             GameType selectedGame = request.GameType == GameType.Random ? (GameType)Random.Shared.Next(1, 4) : request.GameType;
             GameConfig config = GameSettings.GetConfig(selectedGame);
 
-            string name = request.PlayerName.Trim();
-
-            Player? player = await _players.GetByNameAsync(name);
+            Player? player = await _players.GetByIdAsync(authenticatedPlayerId);
 
             if (player is null)
             {
-                player = new Player { Name = char.ToUpper(name[0]) + name[1..].ToLower() };
-                await _players.AddAsync(player);
-                await _players.SaveChangesAsync();
+                return Fail<CreateGameResponse>("Player not found");
             }
 
-            if (player.Balance < request.stake)
+            if (player.Balance < request.Stake)
                 return Fail<CreateGameResponse>($"{player.Name} has insufficient balance.");
 
 
@@ -61,7 +54,7 @@ namespace GuessingGame.API.Services
             return Ok("Game retrieved successfully.", MapState(game));
         }
 
-        public async Task<ApiResponse<GameStateResponse>> JoinGameAsync(int gameId, JoinGameRequest request)
+        public async Task<ApiResponse<GameStateResponse>> JoinGameAsync(int gameId, int authenticatedPlayerId, JoinGameRequest request)
         {
             GameSession? game =  await _games.GetByIdAsync(gameId);
 
@@ -73,11 +66,6 @@ namespace GuessingGame.API.Services
             if (game.Status != GameStatus.WaitingForPlayers)
             {
                 return Fail<GameStateResponse>("Players cannot join after the game has started.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.PlayerName))
-            {
-                return Fail<GameStateResponse>("Player name is required.");
             }
 
             if (request.Stake <= 0)
@@ -92,22 +80,14 @@ namespace GuessingGame.API.Services
                 return Fail<GameStateResponse>($"The game is full, maximum of " + $"{config.MaxPlayers} players.");
             }
 
-            string name = request.PlayerName.Trim();
-
-            Player? player = await _players.GetByNameAsync(name);
+            Player? player = await _players.GetByIdAsync(authenticatedPlayerId);
 
             if (player is null)
             {
-                player = new Player
-                {
-                    Name = char.ToUpper(name[0]) + name[1..].ToLower()
-                };
-
-                await _players.AddAsync(player);
-                await _players.SaveChangesAsync();
+                return Fail<GameStateResponse>("Player not found.");
             }
 
-            bool alreadyJoined = game.Players.Any(gamePlayer => gamePlayer.PlayerId == player.Id);
+            bool alreadyJoined = game.Players.Any(gamePlayer => gamePlayer.PlayerId == authenticatedPlayerId);
 
             if (alreadyJoined)
             {
@@ -122,7 +102,7 @@ namespace GuessingGame.API.Services
             var gamePlayer = new GamePlayer
             {
                 GameSessionId = game.Id,
-                PlayerId = player.Id,
+                PlayerId = authenticatedPlayerId,
                 Stake = request.Stake,
                 Status = PlayerStatus.Active
             };
@@ -131,6 +111,11 @@ namespace GuessingGame.API.Services
             await _games.SaveChangesAsync();
 
             GameSession updatedGame = (await _games.GetByIdAsync(gameId))!;
+
+            if (updatedGame is null)
+            {
+                return Fail<GameStateResponse>("Player joined, but the updated game could not be retrieved.");
+            }
 
             return Ok($"{player.Name} joined the game successfully.", MapState(updatedGame));
         }

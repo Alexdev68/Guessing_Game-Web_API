@@ -57,7 +57,8 @@ namespace GuessingGame.API.Repositories
             game.Players.Add(new GamePlayer
             {
                 PlayerId = player.Id,
-                Stake = request.stake,
+                Player = player,
+                Stake = request.Stake,
                 Status = PlayerStatus.Active
             });
 
