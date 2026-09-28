@@ -4,13 +4,22 @@ using GuessingGame.API.Models;
 using GuessingGame.API.Models.Enums;
 using GuessingGame.API.Repositories.Interfaces;
 using GuessingGame.API.Services.Interfaces;
+using GuessingGame.API.Caching;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace GuessingGame.API.Services
 {
     public class RoundService : IRoundService
     {
         private readonly IGameRepository _games;
-        public RoundService(IGameRepository games) => _games = games;
+        private readonly ILogger<RoundService> _logger;
+        private readonly IMemoryCache _cache;
+        public RoundService(IGameRepository games, ILogger<RoundService> logger, IMemoryCache cache)
+        {
+            _games = games;
+            _logger = logger;
+            _cache = cache;
+        }
 
         public Task<ApiResponse<SubmitGuessResponse>> SubmitGuessAsync(int gameId, int playerId, SubmitGuessRequest request)
         {
@@ -25,32 +34,51 @@ namespace GuessingGame.API.Services
         private async Task<ApiResponse<SubmitGuessResponse>> SaveAndEvaluateAsync(int gameId, SubmitGuessRequest request, int playerId, bool isRollup)
         {
             GameSession? game = await _games.GetByIdAsync(gameId);
-            if (game is null) return Fail("Game not found.");
+
+            if (game is null)
+            {
+                _logger.LogWarning("Game {GameId} submission rejected because game was not found.", gameId);
+                return Fail("Game not found.");
+            }
 
             GameConfig config = GameSettings.GetConfig(game.GameType);
 
             GameStatus required = isRollup ? GameStatus.WaitingForRollupGuesses : GameStatus.WaitingForGuesses;
 
             if (game.Status != required)
+            {
+                _logger.LogWarning("Game {GameId} guess submission rejected because game has status {GameStatus}.", gameId, game.Status);
                 return Fail($"Guesses cannot be submitted while status is {game.Status}.");
+            }
 
             GamePlayer? entry = game.Players.FirstOrDefault(x => x.PlayerId == playerId);
-            if (entry is null) return Fail("This player is not part of the game.");
+            if (entry is null)
+            {
+                _logger.LogWarning("Game {GameId} guess submission rejected because player with ID {PlayerId} is not part of the game.", gameId, playerId);
+                return Fail("This player is not part of the game.");
+            }
 
             if ((!isRollup && entry.Status != PlayerStatus.Active) || (isRollup && entry.Status != PlayerStatus.InRollup))
+            {
+                _logger.LogWarning("Game {GameId} guess submission rejected because player with ID {PlayerId} is not active in this stage with status {PlayerStatus}.", gameId, playerId, entry.Status);
                 return Fail("This player is not active in this stage.");
+            }
 
             ApiResponse<string> parseResult = GuessParser.ParseGuesses(request.Guesses, config);
 
+            int round = isRollup ? game.RollupRound : game.CurrentRound;
+
             if (!parseResult.Success)
             {
+                _logger.LogWarning("Game {GameId} guess submission was rejected by validation for RoundNumber {RoundNumber}.", gameId, round);
                 return Fail(parseResult.Message);
             }
 
-            int round = isRollup ? game.RollupRound : game.CurrentRound;
-
             if (await _games.GuessExistsAsync(entry.Id, round, isRollup))
+            {
+                _logger.LogWarning("Game {GameId} duplicate guess submission was rejected for RoundNumber {RoundNumber}.", gameId, round);
                 return Fail("This player has already submitted for this round.");
+            }
 
             var guess = new PlayerGuess
             {
@@ -63,6 +91,10 @@ namespace GuessingGame.API.Services
             _games.AddGuess(guess);
             await _games.SaveChangesAsync();
 
+            _cache.Remove(CacheKeys.Game(gameId));
+
+            _logger.LogInformation("Game {GameId} guess submitted successfully for RoundNumber {RoundNumber}.", gameId, round);
+
             game = (await _games.GetByIdAsync(gameId))!;
             List<GamePlayer> requiredPlayers = game.Players
                 .Where(x => isRollup
@@ -74,6 +106,8 @@ namespace GuessingGame.API.Services
 
             if (submitted < requiredPlayers.Count)
             {
+                _logger.LogDebug("Game {GameId} round {RoundNumber} is waiting for more guesses: {SubmittedCount}/{RequiredCount}", gameId, round, submitted, requiredPlayers.Count);
+
                 return Ok("Guess saved. Waiting for the other active players.", new SubmitGuessResponse
                 {
                     GuessId = guess.Id,
@@ -89,9 +123,14 @@ namespace GuessingGame.API.Services
                 });
             }
 
-            RoundEvaluationResult evaluation = isRollup ? EvaluateRollup(game, round) : EvaluateNormalRound(game, round);
+            _logger.LogInformation("Game {GameId} evaluating round {RoundNumber} with {ParticipantCount} participants ", gameId, round, requiredPlayers.Count);
+            RoundEvaluationResult evaluation = isRollup ? EvaluateRollup(game, round, _logger) : EvaluateNormalRound(game, round, _logger);
 
             await _games.SaveChangesAsync();
+
+            RemoveGameRelatedCaches(game);
+
+            _logger.LogInformation("Game {GameId} round {RoundNumber} evaluation completed", gameId, round);
 
             return Ok(evaluation.Message, new SubmitGuessResponse
             {
@@ -110,7 +149,7 @@ namespace GuessingGame.API.Services
             });
         }
 
-        private static RoundEvaluationResult EvaluateNormalRound(GameSession game, int round)
+        private static RoundEvaluationResult EvaluateNormalRound(GameSession game, int round, ILogger _logger)
         {
             GameConfig config = GameSettings.GetConfig(game.GameType);
 
@@ -122,7 +161,8 @@ namespace GuessingGame.API.Services
                 game,
                 activePlayers,
                 round,
-                isRollup: false);
+                isRollup: false,
+                _logger: _logger);
 
             bool activePlayersRemain = game.Players.Any(player => player.Status == PlayerStatus.Active);
 
@@ -140,6 +180,8 @@ namespace GuessingGame.API.Services
 
             if (successfulPlayers.Count == 0)
             {
+                _logger.LogInformation("Game {GameId} completed without a winner", game.Id);
+
                 CompleteWithoutWinner(game);
 
                 return Result("The game ended without a winner.", successfulPlayers);
@@ -147,6 +189,7 @@ namespace GuessingGame.API.Services
 
             if (successfulPlayers.Count == 1)
             {
+                _logger.LogInformation("Game {GameId} completed with a single winner: {WinnerPlayerId}", game.Id, successfulPlayers[0].PlayerId);
                 CompleteWithWinner(game, successfulPlayers[0]);
 
                 return Result("The game completed with one winner.", successfulPlayers);
@@ -161,6 +204,8 @@ namespace GuessingGame.API.Services
                         : PlayerStatus.Lost;
                 }
 
+                _logger.LogInformation("Game {GameId} has entered rollup with {WinnerCount} players", game.Id, successfulPlayers.Count);
+
                 game.RollupRound = 1;
                 game.Status = GameStatus.WaitingForRollupGuesses;
                 game.WinningNumbers = string.Join(", ", RandomGenerator.Generate(config));
@@ -173,7 +218,7 @@ namespace GuessingGame.API.Services
             return Result("The game completed with multiple winners.", successfulPlayers);
         }
 
-        private static RoundEvaluationResult EvaluateRollup(GameSession game, int round)
+        private static RoundEvaluationResult EvaluateRollup(GameSession game, int round, ILogger _logger)
         {
             GameConfig config = GameSettings.GetConfig(game.GameType);
 
@@ -184,7 +229,8 @@ namespace GuessingGame.API.Services
                     game,
                     rollupPlayers,
                     round,
-                    isRollup: true);
+                    isRollup: true,
+                    _logger: _logger);
 
             if (rollupWinners.Count == 1)
             {
@@ -198,6 +244,8 @@ namespace GuessingGame.API.Services
                     }
                 }
 
+                _logger.LogInformation("Game {GameId} completed with a final winner: Player {PlayerId}", game.Id, finalWinner.PlayerId);
+
                 CompleteWithWinner(game, finalWinner);
 
                 return Result("Rollup completed with one final winner.", rollupWinners);
@@ -210,6 +258,8 @@ namespace GuessingGame.API.Services
                     player.Status =
                         PlayerStatus.LostInRollup;
                 }
+
+                _logger.LogInformation("Rollup completed with no winners. Game {GameId} ended without a winner.", game.Id);
 
                 CompleteWithoutWinner(game);
 
@@ -228,13 +278,14 @@ namespace GuessingGame.API.Services
                     : PlayerStatus.LostInRollup;
             }
 
+            _logger.LogInformation("Game {GameId} continues to Rollup round {RollupRound} with {WinnerCount} players", game.Id, game.RollupRound + 1, rollupWinners.Count);
             game.RollupRound++;
             game.Status = GameStatus.WaitingForRollupGuesses;
 
             return Result($"Multiple rollup winners. Rollup round {game.RollupRound} has started.", rollupWinners);
         }
 
-        private static List<GamePlayer> EvaluateParticipants(GameSession game, List<GamePlayer> participants, int round, bool isRollup)
+        private static List<GamePlayer> EvaluateParticipants(GameSession game, List<GamePlayer> participants, int round, bool isRollup, ILogger _logger)
         {
             GameConfig config = GameSettings.GetConfig(game.GameType);
             List<string> winningNumbers = game.WinningNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -253,6 +304,8 @@ namespace GuessingGame.API.Services
 
                 if (currentGuess?.IsCorrect != true)
                     continue;
+
+                _logger.LogInformation("Player {playerId} guessed correctly in Game {GameId}, round {RoundNumber}", participant.PlayerId, game.Id, round);
 
                 if (!isRollup)
                 {
@@ -317,6 +370,21 @@ namespace GuessingGame.API.Services
                 if (!winnerPlayerIds.Contains(entry.PlayerId) && entry.Status != PlayerStatus.LostInRollup)
                 {
                     entry.Status = PlayerStatus.Lost;
+                }
+            }
+        }
+
+        private void RemoveGameRelatedCaches(GameSession game)
+        {
+            _cache.Remove(CacheKeys.Game(game.Id));
+
+            _cache.Remove(CacheKeys.AvailableGames);
+
+            foreach (int playerId in game.Players.Select(x => x.PlayerId).Distinct())
+            {
+                foreach (PlayerGamesFilter filter in Enum.GetValues<PlayerGamesFilter>())
+                {
+                    _cache.Remove(CacheKeys.PlayerGames(playerId, filter));
                 }
             }
         }

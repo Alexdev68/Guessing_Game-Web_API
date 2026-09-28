@@ -62,6 +62,10 @@ namespace GuessingGame.API.Data
                 .WithOne(player => player.User)
                 .HasForeignKey<User>(user => user.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<User>()
+                .HasIndex(user => user.ApiKeyHash)
+                .IsUnique();
         }
     }
 }

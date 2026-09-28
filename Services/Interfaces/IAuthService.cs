@@ -12,4 +12,8 @@ public interface IAuthService
     Task<ApiResponse<TokenResponse>> RefreshTokenAsync(RefreshTokenRequest request);
 
     Task<ApiResponse> LogoutAsync(int userId);
+
+    Task<ApiResponse<ApiKeyResponse>> GenerateApiKeyAsync(int authenticatedUserId);
+
+    Task<ApiResponse> RevokeApiKeyAsync(int authenticatedUserId);
 }

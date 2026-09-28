@@ -10,9 +10,13 @@ public sealed class User
 
     public string Role { get; set; } = "Player";
 
-    public string? RefreshToken { get; set; }
+    public string? RefreshTokenHash { get; set; }
 
     public DateTime? RefreshTokenExpiryTime { get; set; }
+
+    public string? ApiKeyHash { get; set; }
+
+    public DateTime? ApiKeyCreatedAt { get; set; }
 
     public int PlayerId { get; set; }
 

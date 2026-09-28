@@ -12,7 +12,7 @@ namespace GuessingGame.API.DTOs.Response
         public int GuessLength { get; set; }
         public bool AllowRollup { get; set; }
         public int RollupRound { get; set; }
-        public string WinningNumbers { get; set; }
+        public string? WinningNumbers { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }

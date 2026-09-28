@@ -2,12 +2,12 @@
 using GuessingGame.API.DTOs.Response;
 using GuessingGame.API.Services;
 using GuessingGame.API.Services.Interfaces;
+using GuessingGame.API.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GuessingGame.API.Controllers;
 
-[Authorize]
 [ApiController]
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
@@ -44,6 +44,28 @@ public sealed class AuthController : ControllerBase
         ApiResponse<TokenResponse> result = await _authService.RefreshTokenAsync(request);
 
         return result.Success ? Ok(result) : Unauthorized(result);
+    }
+
+    [Authorize(AuthenticationSchemes = AuthSchemes.Jwt)]
+    [HttpPost("api-key")]
+    public async Task<IActionResult> GenerateApiKey()
+    {
+        int userId = CurrentUserService.GetUserId(User);
+
+        ApiResponse<ApiKeyResponse> result = await _authService.GenerateApiKeyAsync(userId);
+
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [Authorize]
+    [HttpDelete("api-key")]
+    public async Task<IActionResult> RevokeApiKey()
+    {
+        int userId = CurrentUserService.GetUserId(User);
+
+        ApiResponse result = await _authService.RevokeApiKeyAsync(userId);
+
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 
     [Authorize]

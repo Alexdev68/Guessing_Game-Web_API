@@ -6,7 +6,7 @@ namespace GuessingGame.API.Repositories.Interfaces
 {
     public interface IGameRepository
     {
-        Task<GameSession> GetByIdAsync(int gameId);
+        Task<GameSession?> GetByIdAsync(int gameId);
         Task AddAsync(GameSession game);
         void AddGamePlayer(GamePlayer gamePlayer);
         void AddGuess(PlayerGuess guess);

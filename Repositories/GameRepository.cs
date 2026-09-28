@@ -21,6 +21,7 @@ namespace GuessingGame.API.Repositories
         public void AddGuess(PlayerGuess guess) => _context.PlayerGuesses.Add(guess);
 
         public Task<GameSession?> GetByIdAsync(int gameId) => _context.GameSessions
+            .AsSingleQuery()
             .Include(game => game.Players)
                 .ThenInclude(gamePlayer => gamePlayer.Player)
             .Include(game => game.Players)
