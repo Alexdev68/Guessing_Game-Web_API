@@ -11,7 +11,6 @@ using GuessingGame.API.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.SignalR;
 
 namespace GuessingGame.API.Services;
 
@@ -41,6 +40,7 @@ public sealed class AuthService : IAuthService
         if (emailExists)
         {
             _logger.LogWarning("Registration rejected because email is already registered.");
+
             return Fail<TokenResponse>("An account with this email already exists.");
         }
 
@@ -49,53 +49,53 @@ public sealed class AuthService : IAuthService
         if (playerNameExists)
         {
             _logger.LogWarning("Registration rejected because player name is already in use.");
+
             return Fail<TokenResponse>("That player name is already in use.");
         }
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
 
-        try
-        {
-            var player = new Player
+        return await executionStrategy.ExecuteAsync(
+            async () =>
             {
-                Name = FormatName(playerName),
-                Balance = 5000,
-                FirstSeen = DateTime.UtcNow,
-                LastSeen = DateTime.UtcNow
-            };
+                _context.ChangeTracker.Clear();
 
-            _context.Players.Add(player);
-            await _context.SaveChangesAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            var user = new User
-            {
-                Email = email,
-                Role = "Player",
-                PlayerId = player.Id,
-                Player = player
-            };
+                var player = new Player
+                {
+                    Name = FormatName(playerName),
+                    Balance = 5000,
+                    FirstSeen = DateTime.UtcNow,
+                    LastSeen = DateTime.UtcNow
+                };
 
-            user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
+                _context.Players.Add(player);
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
 
-            TokenResponse tokenResponse = await CreateTokenResponseAsync(user);
+                var user = new User
+                {
+                    Email = email,
+                    Role = "Player",
+                    PlayerId = player.Id,
+                    Player = player
+                };
 
-            await transaction.CommitAsync();
+                user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
-            _logger.LogInformation("User {UserId} registered successfully with player {PlayerId}", user.Id, player.Id);
+                _context.Users.Add(user);
 
-            return Ok("Account registered successfully.", tokenResponse);
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync();
+                await _context.SaveChangesAsync();
 
-            _logger.LogError(ex, "Registration failed while creating a new account");
+                TokenResponse tokenResponse = await CreateTokenResponseAsync(user);
 
-            throw;
-        }
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("User {UserId} registered successfully with Player {PlayerId}", user.Id, player.Id);
+
+                return Ok("Account registered successfully.", tokenResponse);
+            });
     }
 
     public async Task<ApiResponse<TokenResponse>> LoginAsync(LoginRequest request)
